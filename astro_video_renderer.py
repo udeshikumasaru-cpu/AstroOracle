@@ -488,12 +488,21 @@ def generate_voiceover(script: str, output_file: str = None) -> float:
     out = output_file or ASTRO_VOICE_FILE
     wc  = len(script.split())
     print(f"   🎙️  Generating voiceover ({wc:,} words, ~{wc//140} min)...")
+
+    async def _run():
+        await _tts_async(script, TTS_VOICE, out)
+
     try:
-        asyncio.run(_tts_async(script, TTS_VOICE, out))
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                future = pool.submit(asyncio.run, _run())
+                future.result()
+        else:
+            loop.run_until_complete(_run())
     except RuntimeError:
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(_tts_async(script, TTS_VOICE, out))
-        loop.close()
+        asyncio.run(_run())
 
     if not os.path.exists(out) or os.path.getsize(out) < 500:
         raise RuntimeError(f"TTS failed: {out}")

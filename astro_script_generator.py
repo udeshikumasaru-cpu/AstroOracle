@@ -27,6 +27,8 @@ from astro_config import (
 )
 
 # ── Groq client ───────────────────────────────────────────────
+if not GROQ_API_KEY:
+    raise EnvironmentError("GROQ_API_KEY environment variable is not set.")
 client = Groq(api_key=GROQ_API_KEY)
 
 # ── Gemini client (lazy-init) ─────────────────────────────────
@@ -182,7 +184,7 @@ def _check_min_words(script: str, kind: str, label: str) -> str:
     return script
 
 
-
+def _clean(text: str) -> str:
     """Strip markdown and non-TTS characters."""
     text = re.sub(r'\*{1,3}(.*?)\*{1,3}', r'\1', text)
     text = re.sub(r'^#{1,6}\s+', '',          text, flags=re.MULTILINE)
@@ -304,6 +306,8 @@ def generate_weekly_omnibus_script(astro_context: dict) -> str:
     wc = len(full_script.split())
     print(f"   ✅ Omnibus script: {wc:,} words (~{wc//140} min)")
     return _check_min_words(full_script, "omnibus", f"omnibus {week}")
+
+
 # ─────────────────────────────────────────────────────────────
 
 def generate_sign_script(sign: str, astro_context: dict) -> str:

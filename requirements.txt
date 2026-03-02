@@ -1,0 +1,24 @@
+# ============================================================
+#  Astro Oracle — Python Dependencies
+# ============================================================
+
+# --- AI / LLM ---
+groq
+google-generativeai
+
+# --- Astrology / Ephemeris ---
+ephem
+pytz
+
+# --- Text-to-Speech ---
+edge-tts
+
+# --- Video / Image ---
+moviepy
+Pillow
+
+# --- YouTube API ---
+google-auth
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client

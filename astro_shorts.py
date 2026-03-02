@@ -406,20 +406,26 @@ def render_sign_short(sign: str, week_label: str, astro_context: dict,
         t for t in astro_context.get("transits", [])
         if sign in t.get("affected_signs", [])
     ]
-
-    # Script
     script, preds, lucky_day, lucky_num, oracle = generate_sign_short_script(
         sign, week_label, sd, astro_context
     )
 
     # TTS
     out_voice = ASTRO_SHORT_VOICE.replace(".mp3", f"_{sign.lower()}.mp3")
+
+    async def _run_tts():
+        await _tts_async(script, TTS_VOICE, out_voice)
+
     try:
-        asyncio.run(_tts_async(script, TTS_VOICE, out_voice))
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            import concurrent.futures
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                pool.submit(asyncio.run, _run_tts()).result()
+        else:
+            loop.run_until_complete(_run_tts())
     except RuntimeError:
-        loop = asyncio.new_event_loop()
-        loop.run_until_complete(_tts_async(script, TTS_VOICE, out_voice))
-        loop.close()
+        asyncio.run(_run_tts())
 
     audio_clip = AudioFileClip(out_voice)
     audio_dur  = min(audio_clip.duration, 58.0)

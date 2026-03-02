@@ -160,7 +160,7 @@ def run_sign_pipeline(sign, ctx, upload_short=True):
             try:
                 sv      = render_sign_short(sign, week, ctx, pos)
                 st,sd_,stags = build_sign_short_seo(sign, week, ctx)
-                sthumb  = ASTRO_SHORT_THUMB.replace(".jpg", f"_{sign.lower()}.jpg")
+                sthumb  = f"astro_thumb_{sign.lower()}.jpg"
                 sid     = _upload(sv, st, sd_, sthumb, stags)
                 mark_done(sk)
                 print(f"{sign} Short: https://www.youtube.com/shorts/{sid}")
@@ -270,7 +270,7 @@ def run_weekly(mode="all", sign_filter=None):
             try:
                 sv = render_sign_short(sign, week, ctx, pos)
                 st,sd_,stags = build_sign_short_seo(sign, week, ctx)
-                sth = ASTRO_SHORT_THUMB.replace(".jpg", f"_{sign.lower()}.jpg")
+                sth = f"astro_thumb_{sign.lower()}.jpg"
                 sid = _upload(sv, st, sd_, sth, stags)
                 mark_done(sk); uploaded+=1
                 print(f"{sign} Short: https://www.youtube.com/shorts/{sid}")

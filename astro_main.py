@@ -279,6 +279,10 @@ def run_weekly(mode="all", sign_filter=None):
 
     print(f"\n{'='*55}")
     print(f"  RUN COMPLETE — Uploaded:{uploaded}  Skipped:{skipped}  Failed:{failed}")
+    if failed:
+        print(f"  NOTE: If failures show 'Script too short: 0 words', this is")
+        print(f"  caused by Groq daily quota + broken Gemini fallback.")
+        print(f"  Fix: run  python fix_gemini_model.py  then re-run the pipeline.")
     print(f"{'='*55}\n")
 
 

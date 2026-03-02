@@ -1,0 +1,16 @@
+Set-Content .gitignore "# Output files - never commit these
+*.mp4
+*.mp3
+*.jpg
+*.pkl
+*.json
+*.txt
+token_env_export.txt
+client_secret.json
+script_*.txt
+__pycache__/
+*.pyc
+
+# Keep these specific files
+!requirements.txt
+"

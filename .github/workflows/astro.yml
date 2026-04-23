@@ -4,23 +4,50 @@ on:
   schedule:
     - cron: "0 8 * * 0"   # Every Sunday 08:00 UTC
   workflow_dispatch:       # Manual trigger
+    inputs:
+      mode:
+        description: "Run mode: all | omnibus | signs | transit | shorts | debug"
+        required: false
+        default: "all"
 
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 340    # 5h 40m — safe ceiling for 25+ videos
+
     steps:
-      - uses: actions/checkout@v4          # ← MUST be first
+      - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-          cache: "pip"                     # ← now works (requirements.txt exists)
+          cache: "pip"
 
-      - name: Install system fonts
-        run: sudo apt-get install -y fonts-liberation fonts-dejavu
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            fonts-liberation fonts-dejavu \
+            ffmpeg \
+            imagemagick
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
+
+      - name: Patch Gemini model (ensures fallback works)
+        run: python fix_gemini_model.py
+
+      - name: Verify YouTube token exists
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+        run: |
+          if [ -z "$YOUTUBE_TOKEN_B64" ]; then
+            echo "❌ YOUTUBE_TOKEN_B64 secret is missing!"
+            echo "Run generate_token.py locally, choose 'export as base64',"
+            echo "then add the value to GitHub → Settings → Secrets."
+            exit 1
+          fi
+          echo "✅ YouTube token secret found."
 
       - name: Run Astro Oracle
         env:
@@ -28,4 +55,32 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
-        run: python astro_main.py
+        run: |
+          MODE="${{ github.event.inputs.mode }}"
+          MODE="${MODE:-all}"
+          echo "▶ Running: python astro_main.py $MODE"
+          python astro_main.py $MODE 2>&1 | tee run_log.txt
+
+      - name: Upload run log (always — even on failure)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: astro-run-log-${{ github.run_number }}
+          path: |
+            run_log.txt
+            uploaded_astro.json
+            script_*.txt
+          retention-days: 14
+
+      - name: Check for failures in log
+        if: always()
+        run: |
+          if grep -q "Failed:[^0]" run_log.txt; then
+            echo "⚠️ Some videos failed — check the uploaded log artifact."
+            # Not a hard exit — partial success is still success
+          fi
+          if grep -q "deleted_client" run_log.txt; then
+            echo "❌ OAuth client deleted! Re-run generate_token.py locally"
+            echo "   and update the YOUTUBE_TOKEN_B64 GitHub secret."
+            exit 1
+          fi

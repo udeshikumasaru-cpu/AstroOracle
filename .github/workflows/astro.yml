@@ -15,6 +15,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 340    # 5h 40m — safe ceiling for 25+ videos
 
+    permissions:
+      contents: read        # needed for checkout
+
     steps:
       - uses: actions/checkout@v4
 
@@ -49,6 +52,44 @@ jobs:
           fi
           echo "✅ YouTube token secret found."
 
+      - name: Decode & refresh YouTube token before run
+        env:
+          YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
+          YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
+        run: |
+          # Strip all whitespace/newlines before decoding (handles Windows line endings)
+          echo "$YOUTUBE_TOKEN_B64" | tr -d '[:space:]' | base64 -d > token.json
+          echo "✅ token.json written."
+
+          # Force a proactive refresh so the token is fresh before the long run
+          python - <<'EOF'
+          import json
+          from google.oauth2.credentials import Credentials
+          from google.auth.transport.requests import Request
+
+          with open("token.json") as f:
+              data = json.load(f)
+
+          creds = Credentials(
+              token=data.get("token"),
+              refresh_token=data.get("refresh_token"),
+              token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
+              client_id=data.get("client_id"),
+              client_secret=data.get("client_secret"),
+              scopes=data.get("scopes"),
+          )
+
+          if creds.refresh_token:
+              creds.refresh(Request())
+              # Write the refreshed token back to disk
+              updated = json.loads(creds.to_json())
+              with open("token.json", "w") as f:
+                  json.dump(updated, f)
+              print("✅ Token refreshed and written back to token.json")
+          else:
+              print("⚠️  No refresh_token found — cannot auto-refresh.")
+          EOF
+
       - name: Run Astro Oracle
         env:
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
@@ -60,6 +101,26 @@ jobs:
           MODE="${MODE:-all}"
           echo "▶ Running: python astro_main.py $MODE"
           python astro_main.py $MODE 2>&1 | tee run_log.txt
+
+      - name: Save refreshed token back to GitHub Secrets
+        if: always()   # runs even if astro_main.py had partial failures
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          if [ ! -f token.json ]; then
+            echo "⚠️  token.json not found — skipping secret update."
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "⚠️  GH_PAT secret not set — skipping secret update."
+            echo "    Add a PAT with secrets scope as GH_PAT in repo secrets."
+            exit 0
+          fi
+          NEW_B64=$(base64 -w 0 token.json)
+          gh secret set YOUTUBE_TOKEN_B64 \
+            --repo "${{ github.repository }}" \
+            --body "$NEW_B64"
+          echo "✅ YOUTUBE_TOKEN_B64 secret updated with refreshed token."
 
       - name: Upload run log (always — even on failure)
         if: always()
@@ -82,5 +143,10 @@ jobs:
           if grep -q "deleted_client" run_log.txt; then
             echo "❌ OAuth client deleted! Re-run generate_token.py locally"
             echo "   and update the YOUTUBE_TOKEN_B64 GitHub secret."
+            exit 1
+          fi
+          if grep -q "invalid_grant" run_log.txt; then
+            echo "❌ Token invalid_grant error detected!"
+            echo "   Re-run generate_token.py locally and update YOUTUBE_TOKEN_B64."
             exit 1
           fi

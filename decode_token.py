@@ -1,54 +1,34 @@
-"""
-decode_token.py — Called by GitHub Actions to decode YOUTUBE_TOKEN_B64
-and proactively refresh it before the main pipeline runs.
-"""
-import os, base64, json, sys
-from google.oauth2.credentials import Credentials
+import os, base64, pickle, json, sys
 from google.auth.transport.requests import Request
 
-# Read secret from environment
 raw = os.environ.get("YOUTUBE_TOKEN_B64", "")
 if not raw:
-    print("❌ YOUTUBE_TOKEN_B64 env var is empty.", file=sys.stderr)
+    print("YOUTUBE_TOKEN_B64 missing", file=sys.stderr)
     sys.exit(1)
 
-# Strip ALL whitespace (handles Windows \r\n, trailing newlines, spaces)
 cleaned = "".join(raw.split())
 
-# Decode base64
 try:
-    decoded = base64.b64decode(cleaned).decode("utf-8")
+    creds = pickle.loads(base64.b64decode(cleaned))
 except Exception as e:
-    print(f"❌ base64 decode failed: {e}", file=sys.stderr)
+    print(f"Failed to load credentials: {e}", file=sys.stderr)
     sys.exit(1)
 
-# Validate JSON
-try:
-    data = json.loads(decoded)
-except Exception as e:
-    print(f"❌ token.json is not valid JSON: {e}", file=sys.stderr)
-    sys.exit(1)
+print(f"Credentials loaded. Valid: {creds.valid}, Expired: {creds.expired}")
 
-# Write to disk
-with open("token.json", "w") as f:
-    f.write(decoded)
-print("✅ token.json written.")
-
-# Refresh the OAuth token
-creds = Credentials(
-    token=data.get("token"),
-    refresh_token=data.get("refresh_token"),
-    token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
-    client_id=data.get("client_id"),
-    client_secret=data.get("client_secret"),
-    scopes=data.get("scopes"),
-)
-
-if creds.refresh_token:
+if creds.expired and creds.refresh_token:
     creds.refresh(Request())
-    updated = json.loads(creds.to_json())
-    with open("token.json", "w") as f:
-        json.dump(updated, f)
-    print("✅ Token refreshed and written back to token.json")
-else:
-    print("⚠️  No refresh_token found — skipping refresh.")
+    print("Token refreshed OK")
+
+# Save as JSON for the main pipeline
+token_data = json.loads(creds.to_json())
+with open("token.json", "w") as f:
+    json.dump(token_data, f)
+print("token.json written")
+
+# Save refreshed pickle back for the secret update step
+import pickle
+refreshed_b64 = base64.b64encode(pickle.dumps(creds)).decode()
+with open("token_refreshed_b64.txt", "w") as f:
+    f.write(refreshed_b64)
+print("token_refreshed_b64.txt written")

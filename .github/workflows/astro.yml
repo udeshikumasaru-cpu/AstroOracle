@@ -57,38 +57,51 @@ jobs:
           YOUTUBE_TOKEN_B64: ${{ secrets.YOUTUBE_TOKEN_B64 }}
           YOUTUBE_CLIENT_SECRET_JSON: ${{ secrets.YOUTUBE_CLIENT_SECRET_JSON }}
         run: |
-          # Strip all whitespace/newlines before decoding (handles Windows line endings)
-          echo "$YOUTUBE_TOKEN_B64" | tr -d '[:space:]' | base64 -d > token.json
-          echo "✅ token.json written."
+          # Use Python to decode — immune to shell/whitespace/line-ending issues
+          python3 - <<'EOF'
+import os, base64, json, sys
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 
-          # Force a proactive refresh so the token is fresh before the long run
-          python - <<'EOF'
-          import json
-          from google.oauth2.credentials import Credentials
-          from google.auth.transport.requests import Request
+# Decode token — strip ALL whitespace before decoding
+raw = os.environ["YOUTUBE_TOKEN_B64"]
+cleaned = "".join(raw.split())  # removes spaces, newlines, carriage returns
+try:
+    decoded = base64.b64decode(cleaned).decode("utf-8")
+except Exception as e:
+    print(f"❌ base64 decode failed: {e}", file=sys.stderr)
+    sys.exit(1)
 
-          with open("token.json") as f:
-              data = json.load(f)
+with open("token.json", "w") as f:
+    f.write(decoded)
+print("✅ token.json written.")
 
-          creds = Credentials(
-              token=data.get("token"),
-              refresh_token=data.get("refresh_token"),
-              token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
-              client_id=data.get("client_id"),
-              client_secret=data.get("client_secret"),
-              scopes=data.get("scopes"),
-          )
+# Verify it is valid JSON
+try:
+    data = json.loads(decoded)
+except Exception as e:
+    print(f"❌ token.json is not valid JSON: {e}", file=sys.stderr)
+    sys.exit(1)
 
-          if creds.refresh_token:
-              creds.refresh(Request())
-              # Write the refreshed token back to disk
-              updated = json.loads(creds.to_json())
-              with open("token.json", "w") as f:
-                  json.dump(updated, f)
-              print("✅ Token refreshed and written back to token.json")
-          else:
-              print("⚠️  No refresh_token found — cannot auto-refresh.")
-          EOF
+# Refresh the token
+creds = Credentials(
+    token=data.get("token"),
+    refresh_token=data.get("refresh_token"),
+    token_uri=data.get("token_uri", "https://oauth2.googleapis.com/token"),
+    client_id=data.get("client_id"),
+    client_secret=data.get("client_secret"),
+    scopes=data.get("scopes"),
+)
+
+if creds.refresh_token:
+    creds.refresh(Request())
+    updated = json.loads(creds.to_json())
+    with open("token.json", "w") as f:
+        json.dump(updated, f)
+    print("✅ Token refreshed and written back to token.json")
+else:
+    print("⚠️  No refresh_token found — skipping refresh.")
+EOF
 
       - name: Run Astro Oracle
         env:

@@ -256,10 +256,11 @@ def _call_llm(prompt: str, max_tokens: int = 2000,
                         print(f"   ⚠️  Groq 429 (attempt {attempt+1}/3) — waiting {wait}s...")
                         time.sleep(wait)
                     else:
-                        # Exhaust Groq budget for this run + persist
+                        # Exhaust Groq budget for this run + persist both counters
                         print("   ⚠️  Groq quota exhausted — switching to Gemini for this run")
                         data = _load_usage()
-                        data["tokens"] = GROQ_MAX_TPD  # Force exhausted
+                        data["tokens"] = GROQ_MAX_TPD   # Force token exhaustion
+                        data["calls"]  = GROQ_MAX_RPD   # Force call exhaustion
                         _save_usage(data)
                         break
                 else:

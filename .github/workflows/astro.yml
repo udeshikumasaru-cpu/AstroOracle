@@ -13,7 +13,7 @@ on:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 340    # 5h 40m — safe ceiling for 25+ videos
+    timeout-minutes: 420    # 7h — safe ceiling for 25+ videos (render + TTS + upload)
 
     permissions:
       contents: read        # needed for checkout
@@ -38,7 +38,12 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Patch Gemini model (ensures fallback works)
-        run: python fix_gemini_model.py
+        run: |
+          if [ -f fix_gemini_model.py ]; then
+            python fix_gemini_model.py
+          else
+            echo "ℹ️  fix_gemini_model.py not found — skipping (Gemini fallback uses config default)"
+          fi
 
       - name: Verify YouTube token exists
         env:

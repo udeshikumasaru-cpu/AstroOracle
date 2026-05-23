@@ -175,16 +175,20 @@ def make_sign_thumbnail(sign: str, week_label: str, key_insight: str = "") -> st
     sym_f = _font(380, bold=True)
     sym   = sd["symbol"]
     sw, sh = _tw(draw, sym, sym_f)
-    # Glow layers
+
+    # Composite glow in a single pass: draw all glow ellipses onto one overlay
+    # then alpha_composite once — avoids 60× redundant full-image composites.
+    glow_over = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    glow_draw = ImageDraw.Draw(glow_over)
     for gi in range(60, 0, -8):
-        a = int(50 * (1 - gi/60))
-        over_g = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(over_g).text(
-            (40 - gi//4, 100 - gi//4), sym, font=sym_f,
+        a = int(50 * (1 - gi / 60))
+        glow_draw.ellipse(
+            [40 - gi // 4, 100 - gi // 4,
+             40 + sw + gi // 4, 100 + sh + gi // 4],
             fill=sd["color"] + (a,)
         )
-        img = Image.alpha_composite(img.convert("RGBA"), over_g).convert("RGB")
-        draw = ImageDraw.Draw(img)
+    img = Image.alpha_composite(img.convert("RGBA"), glow_over).convert("RGB")
+    draw = ImageDraw.Draw(img)
 
     draw.text((42, 102), sym, font=sym_f, fill=(0, 0, 0))  # shadow
     draw.text((40, 100), sym, font=sym_f, fill=sd["color"])

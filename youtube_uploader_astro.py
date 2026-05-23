@@ -42,10 +42,15 @@ def _get_credentials():
     """
     Load credentials in priority order:
       1. YOUTUBE_TOKEN_B64 env var  (GitHub Actions / CI)
-      2. youtube_token.pkl file     (local dev, or written by workflow)
+      2. token.json file            (written by decode_token.py in the workflow)
+      3. youtube_token.pkl file     (local dev)
     After loading, refresh if expired and persist the refreshed token
-    back to both the pickle file and update the in-memory b64 copy.
+    back to BOTH token.json AND youtube_token.pkl so the workflow's
+    secret-update step always picks up the freshest token.
     """
+    import json as _json
+    from google.oauth2.credentials import Credentials
+
     creds = None
     token_b64 = os.environ.get("YOUTUBE_TOKEN_B64", "").strip()
 
@@ -57,6 +62,16 @@ def _get_credentials():
             print(f"   ⚠️  Failed to decode YOUTUBE_TOKEN_B64: {e}")
             creds = None
 
+    # Fallback 1: token.json (written by decode_token.py)
+    if creds is None and os.path.exists("token.json"):
+        try:
+            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+            print("   🔑 Credentials loaded from token.json.")
+        except Exception as e:
+            print(f"   ⚠️  Failed to load token.json: {e}")
+            creds = None
+
+    # Fallback 2: legacy pickle (local dev)
     if creds is None and os.path.exists(YOUTUBE_TOKEN_PICKLE):
         try:
             with open(YOUTUBE_TOKEN_PICKLE, "rb") as f:
@@ -79,10 +94,12 @@ def _get_credentials():
         try:
             creds.refresh(Request())
             print("   ✅ Token refreshed successfully.")
-            # Persist refreshed token to pickle so subsequent uploads in the
-            # same run don't need to refresh again.
+            # Persist refreshed token to BOTH formats so subsequent uploads in
+            # the same run and the secret-update step both see the fresh token.
             with open(YOUTUBE_TOKEN_PICKLE, "wb") as f:
                 pickle.dump(creds, f)
+            with open("token.json", "w") as f:
+                f.write(creds.to_json())
         except Exception as e:
             raise RuntimeError(
                 f"Token refresh failed: {e}\n"
@@ -98,7 +115,7 @@ def _get_credentials():
 
 
 def upload_video_astro(video_path, title, description, thumbnail_path,
-                       tags, privacy="public", category_id="22",
+                       tags, privacy="public", category_id="27",
                        default_language="en"):
     """
     Upload a video to YouTube and optionally set a thumbnail.

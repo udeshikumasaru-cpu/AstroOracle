@@ -110,9 +110,12 @@ def get_current_planetary_positions() -> dict:
         "Neptune": ephem.Neptune(),
     }
 
-    # Pluto via manual approximate longitude (ephem has no Pluto)
-    # Pluto has been in Capricorn/Aquarius 2008-2044
-    pluto_lon = 300.5  # approximately Aquarius (2026)
+    # Pluto via approximate longitude (ephem has no Pluto object).
+    # Computed from a known reference: Pluto was at ~300.5° (Aquarius) on 2026-01-01
+    # and moves ~1.4° per year prograde.  This keeps the value reasonably current
+    # without requiring an external ephemeris for the slow outer planet.
+    days_since_ref = (now - datetime(2026, 1, 1, tzinfo=timezone.utc)).days
+    pluto_lon = (300.5 + days_since_ref * (1.4 / 365.25)) % 360
 
     positions = {}
     for name, obj in planets.items():
@@ -247,44 +250,46 @@ def get_transits_next_14_days() -> list:
             except Exception:
                 continue
 
-        # ── Moon phases ──
-        try:
-            moon = ephem.Moon(scan_date)
-            phase = moon.moon_phase   # 0.0 to 1.0
+    # ── Moon phases — use dedicated ephem functions for accuracy ──
+    # The day-by-day phase scan can miss the exact peak (which lasts <1 day).
+    try:
+        date_0_ephem = ephem.Date(now)
+        date_end_ephem = ephem.Date(now + timedelta(days=14))
 
-            # Check for Full Moon (phase near 1.0)
-            if 0.98 <= phase <= 1.0:
-                moon.compute(scan_date, epoch=scan_date)
-                ecl  = ephem.Ecliptic(moon, epoch=scan_date)
-                lon  = math.degrees(ecl.lon) % 360
-                sign = _longitude_to_sign(lon)
+        for finder, phase_type, intensity_desc in [
+            (ephem.next_full_moon, "full_moon", "Full Moon"),
+            (ephem.next_new_moon,  "new_moon",  "New Moon"),
+        ]:
+            phase_date = finder(date_0_ephem)
+            while phase_date <= date_end_ephem:
+                phase_dt   = ephem.Date(phase_date).datetime().replace(tzinfo=timezone.utc)
+                date_str   = phase_dt.strftime("%Y-%m-%d")
+                moon_obj   = ephem.Moon(phase_date)
+                moon_obj.compute(phase_date, epoch=phase_date)
+                ecl        = ephem.Ecliptic(moon_obj, epoch=phase_date)
+                lon        = math.degrees(ecl.lon) % 360
+                sign       = _longitude_to_sign(lon)
+                label      = f"{intensity_desc} in {sign}"
+                description = (
+                    f"{intensity_desc} in {sign} — peak energy, culminations, "
+                    f"heightened emotions and revelations."
+                    if phase_type == "full_moon" else
+                    f"{intensity_desc} in {sign} — fresh starts, setting intentions, "
+                    f"planting seeds for the future."
+                )
                 events.append({
                     "date":           date_str,
-                    "event":          f"Full Moon in {sign}",
+                    "event":          label,
                     "planet":         "Moon",
-                    "type":           "full_moon",
+                    "type":           phase_type,
                     "intensity":      "high",
                     "affected_signs": _moon_phase_affected(sign),
-                    "description":    f"Full Moon in {sign} — peak energy, culminations, heightened emotions and revelations.",
+                    "description":    description,
                 })
-
-            # Check for New Moon (phase near 0.0)
-            elif phase <= 0.02:
-                moon.compute(scan_date, epoch=scan_date)
-                ecl  = ephem.Ecliptic(moon, epoch=scan_date)
-                lon  = math.degrees(ecl.lon) % 360
-                sign = _longitude_to_sign(lon)
-                events.append({
-                    "date":           date_str,
-                    "event":          f"New Moon in {sign}",
-                    "planet":         "Moon",
-                    "type":           "new_moon",
-                    "intensity":      "high",
-                    "affected_signs": _moon_phase_affected(sign),
-                    "description":    f"New Moon in {sign} — fresh starts, setting intentions, planting seeds for the future.",
-                })
-        except Exception:
-            pass
+                # Advance past this occurrence
+                phase_date = finder(ephem.Date(phase_date + 1))
+    except Exception:
+        pass
 
     # Deduplicate (same event on consecutive days — keep first)
     seen_events = set()

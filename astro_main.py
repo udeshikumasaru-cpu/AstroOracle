@@ -81,7 +81,7 @@ def _week_key():
 # ------------------------------------------------------------------
 # Upload helper
 # ------------------------------------------------------------------
-def _upload(video_path, title, description, thumbnail, tags, category="22"):
+def _upload(video_path, title, description, thumbnail, tags, category="27"):
     return upload_video_astro(
         video_path=video_path, title=title, description=description,
         thumbnail_path=thumbnail, tags=tags, privacy="public",
@@ -117,7 +117,7 @@ def run_omnibus_pipeline(ctx):
 
     video         = render_astro_video(script, ctx, slides, ASTRO_OUTPUT_VIDEO)
     title,desc,tags = build_omnibus_seo(ctx)
-    vid_id        = _upload(video, title, desc, thumb, tags)
+    vid_id        = _upload(video, title, desc, thumb, tags, category="24")
     mark_done(wk)
     print(f"OMNIBUS UPLOADED: https://www.youtube.com/watch?v={vid_id}")
     return vid_id

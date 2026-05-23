@@ -288,8 +288,17 @@ def make_short_oracle_slide(sign: str, sd: dict, oracle_msg: str, lucky_day: str
     draw.rounded_rectangle([60, msg_top, SW-60, msg_top+msg_h], radius=24, fill=(30, 0, 70))
     draw.rounded_rectangle([60, msg_top, 82, msg_top+msg_h], radius=12, fill=sd["color"])
     ty = msg_top + 20
-    for ln in lines[:5]:
-        _cx(draw, ty, f'"{ln}"', om_f, (230, 220, 255))
+    for idx, ln in enumerate(lines[:5]):
+        # Opening quote on first line only, closing quote on last line only
+        if len(lines) == 1:
+            display = f'"{ln}"'
+        elif idx == 0:
+            display = f'"{ln}'
+        elif idx == min(4, len(lines) - 1):
+            display = f'{ln}"'
+        else:
+            display = ln
+        _cx(draw, ty, display, om_f, (230, 220, 255))
         ty += 52
 
     # Lucky items
@@ -336,7 +345,7 @@ def generate_sign_short_script(sign: str, week_label: str, sd: dict,
     """
     Returns (script_text, predictions_dict, lucky_day, lucky_num, oracle_msg).
     """
-    from astro_script_generator import _clean, _call_groq, _transits_for_sign
+    from astro_script_generator import _clean, _call_llm, _transits_for_sign
 
     sign_transits = _transits_for_sign(sign, astro_context.get("transits", []))
     week = week_label
@@ -354,16 +363,21 @@ def generate_sign_short_script(sign: str, week_label: str, sd: dict,
         f"Do not mention AI."
     )
 
-    script = _call_groq(prompt, max_tokens=320)
-    if not script:
-        script = (
-            f"{sign}, the cosmos has powerful energy aligned for you this week. "
-            f"Your ruling planet {sd['planet']} is activating new opportunities in love and career. "
-            f"Love is expansive this week. Career momentum builds strongly. "
-            f"Prioritise your health and rest on the weekend. "
-            f"Your oracle message: trust the journey, {sign}. "
-            f"Subscribe to {CHANNEL_NAME} for your full weekly reading. Namaste."
-        )
+    week_id = week_label.replace(" ", "_").replace(",", "").replace("–", "-")
+    fallback = (
+        f"{sign}, the cosmos has powerful energy aligned for you this week. "
+        f"Your ruling planet {sd['planet']} is activating new opportunities in love and career. "
+        f"Love is expansive this week. Career momentum builds strongly. "
+        f"Prioritise your health and rest on the weekend. "
+        f"Your oracle message: trust the journey, {sign}. "
+        f"Subscribe to {CHANNEL_NAME} for your full weekly reading. Namaste."
+    )
+    script = _call_llm(
+        prompt,
+        max_tokens=320,
+        cache_label=f"short_{sign.lower()}_{week_id}_script",
+        fallback_text=fallback,
+    )
 
     # Quick area predictions for slide
     preds = {

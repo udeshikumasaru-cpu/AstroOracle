@@ -578,15 +578,24 @@ def render_astro_video(
         kw["preset"] = "fast"
     final.write_videofile(out, **kw)
 
-    # 5. Cleanup
+    # 5. Close clips to release file handles before any cleanup
+    try:
+        audio.close()
+        video.close()
+        final.close()
+    except Exception:
+        pass
+
+    # 6. Verify output is valid BEFORE cleaning up slides
+    if not os.path.exists(out) or os.path.getsize(out) < 5000:
+        raise RuntimeError(f"Render failed: {out}")
+
+    # 7. Cleanup slide images only after confirmed success
     for p in slide_paths:
         try:
             os.remove(p)
         except Exception:
             pass
-
-    if not os.path.exists(out) or os.path.getsize(out) < 5000:
-        raise RuntimeError(f"Render failed: {out}")
 
     print(f"   ✅ Video: {out} ({os.path.getsize(out)/1e6:.1f} MB)")
     return out

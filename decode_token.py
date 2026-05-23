@@ -19,16 +19,13 @@ print(f"Credentials loaded. Valid: {creds.valid}, Expired: {creds.expired}")
 if creds.expired and creds.refresh_token:
     creds.refresh(Request())
     print("Token refreshed OK")
+elif creds.expired and not creds.refresh_token:
+    print("ERROR: token is expired and has no refresh_token.", file=sys.stderr)
+    print("Re-run generate_token.py locally and update the YOUTUBE_TOKEN_B64 secret.", file=sys.stderr)
+    sys.exit(1)
 
-# Save as JSON for the main pipeline
+# Save as JSON for the main pipeline (also consumed by youtube_uploader_astro.py)
 token_data = json.loads(creds.to_json())
 with open("token.json", "w") as f:
     json.dump(token_data, f)
 print("token.json written")
-
-# Save refreshed pickle back for the secret update step
-import pickle
-refreshed_b64 = base64.b64encode(pickle.dumps(creds)).decode()
-with open("token_refreshed_b64.txt", "w") as f:
-    f.write(refreshed_b64)
-print("token_refreshed_b64.txt written")

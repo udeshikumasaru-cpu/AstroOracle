@@ -386,11 +386,10 @@ def _check_min_words(script: str, kind: str, label: str) -> str:
     wc      = len(script.split())
     minimum = MIN_SCRIPT_WORDS.get(kind, 400)
     if wc < minimum:
-        raise RuntimeError(
-            f"⛔  Script too short: {wc} words (minimum {minimum}) for {label}.\n"
-            f"   Likely caused by Groq/Gemini rate-limit mid-generation.\n"
-            f"   Re-run the pipeline — completed sections are cached and will be reused.\n"
-            f"   If Groq quota is exhausted for today, re-run tomorrow or upgrade your plan."
+        print(
+            f"   ⚠️  Script too short: {wc} words (minimum {minimum}) for {label}.\n"
+            f"      Likely caused by Groq/Gemini rate-limit — using partial script.\n"
+            f"      Re-run tomorrow or clear groq_usage.json to reset the daily budget."
         )
     return script
 
@@ -885,7 +884,7 @@ def build_sign_seo(sign: str, astro_context: dict) -> tuple:
 
     desc = f"""{sign} weekly horoscope for {week} — your complete cosmic forecast.
 
-{sd['emoji']} {sign} ({sd['dates']}) | Element: {sd['element']} | Ruling Planet: {sd['planet']}
+{sd['symbol']} {sign} ({sd['dates']}) | Element: {sd['element']} | Ruling Planet: {sd['planet']}
 
 💫 THIS WEEK FOR {sign.upper()}:
 {transit_bullets}

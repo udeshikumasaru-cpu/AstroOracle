@@ -379,14 +379,41 @@ def generate_sign_short_script(sign: str, week_label: str, sd: dict,
         fallback_text=fallback,
     )
 
-    # Quick area predictions for slide
+    # ── Extract per-area predictions from the generated script ──────────────
+    # Ask the LLM to distill the script into 4 short slide lines.
+    week_id = week_label.replace(" ", "_").replace(",", "").replace("–", "-")
+    pred_prompt = (
+        f"From this {sign} weekly horoscope script, extract exactly 4 short slide-caption lines "
+        f"(10 words max each) — one for each area. "
+        f"Reply with ONLY these 4 lines, in this exact order, one per line, no labels:\n"
+        f"1. Love insight\n2. Career insight\n3. Money insight\n4. Health insight\n\n"
+        f"Script:\n{script}"
+    )
+    pred_fallback = (
+        f"Romantic energy is flowing your way\n"
+        f"Career momentum builds this week\n"
+        f"Financial awareness is favoured\n"
+        f"Rest and balance are your focus"
+    )
+    pred_raw = _call_llm(
+        pred_prompt,
+        max_tokens=120,
+        cache_label=f"short_{sign.lower()}_{week_id}_preds",
+        fallback_text=pred_fallback,
+    )
+    pred_lines = [ln.strip() for ln in pred_raw.strip().splitlines() if ln.strip()]
+    # Strip any leading "1." / "Love:" labels the model may add
+    pred_lines = [re.sub(r'^[\d]+[.)]\s*|^[A-Za-z]+:\s*', '', ln) for ln in pred_lines]
+    while len(pred_lines) < 4:
+        pred_lines.append("")
     preds = {
-        "love":   "Romantic opportunities are present",
-        "career": "Career momentum builds this week",
-        "money":  "Financial awareness is favoured",
-        "health": "Rest and balance are your focus",
+        "love":   pred_lines[0] or "Romantic energy is flowing your way",
+        "career": pred_lines[1] or "Career momentum builds this week",
+        "money":  pred_lines[2] or "Financial awareness is favoured",
+        "health": pred_lines[3] or "Rest and balance are your focus",
     }
 
+    # ── Lucky day / number / oracle — try to extract from script ────────────
     import random
     days    = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
     lucky_d = random.choice(days)
@@ -521,7 +548,7 @@ def build_sign_short_seo(sign: str, week_label: str, astro_context: dict) -> tup
 
     desc = f"""{sign} weekly horoscope for {week_label} in 45 seconds! 🔮
 
-{sd['emoji']} {sign} ({sd['dates']}) — {sd['element']} Sign | Ruled by {sd['planet']}
+{sd['symbol']} {sign} ({sd['dates']}) — {sd['element']} Sign | Ruled by {sd['planet']}
 
 🔔 Subscribe to {CHANNEL_NAME} for full weekly {sign} readings!
 💬 Comment your birth date below!

@@ -438,10 +438,13 @@ def build_astro_week_context() -> dict:
     """
     now = datetime.now(timezone.utc)
 
-    # weekday(): Mon=0 … Sat=5, Sun=6 → convert to Sun=0 … Sat=6, then subtract
-    days_since_sunday = (now.weekday() + 1) % 7
-    week_start = now - timedelta(days=days_since_sunday)  # This week's Sunday
-    week_end   = week_start + timedelta(days=6)
+    # Week runs Mon–Sun (standard for weekly horoscopes).
+    # weekday(): Mon=0 … Sun=6  →  subtract to get back to Monday.
+    days_since_monday = now.weekday()               # 0 if today is Monday
+    week_start = (now - timedelta(days=days_since_monday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end   = week_start + timedelta(days=6)     # Sunday
     week_label = f"{week_start.strftime('%b %d')} – {week_end.strftime('%b %d, %Y')}"
 
     print("🔭 Computing planetary positions...")
